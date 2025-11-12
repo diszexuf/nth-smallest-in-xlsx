@@ -39,13 +39,14 @@ public final class XlsxReader {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Путь к файлу не указан");
         }
 
+        if (filePath.contains("..")) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Path Traversal запрещён");
+        }
+
         Path path = Path.of(filePath).normalize();
 
         if (!path.isAbsolute()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Требуется абсолютный путь");
-        }
-        if (path.toString().contains("..")) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Path Traversal запрещён");
         }
 
         return path;
@@ -95,20 +96,33 @@ public final class XlsxReader {
     private static void extractIntegersFromColumn(Sheet sheet, List<Integer> numbers) {
         for (Row row : sheet) {
             Cell cell = row.getCell(0);
-            if (cell != null && cell.getCellType() == CellType.NUMERIC) {
-                double value = cell.getNumericCellValue();
+            if (cell == null) continue;
 
-                if (value != Math.floor(value)) {
-                    throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
-                            "Дробное число недопустимо: " + value);
-                }
-                if (value < Integer.MIN_VALUE || value > Integer.MAX_VALUE) {
-                    throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
-                            "Число за пределами int: " + value);
-                }
+            // в excel даты хранятся как числовые значения
+            if (cell.getCellType() == CellType.NUMERIC && DateUtil.isCellDateFormatted(cell)) {
+                continue;
+            }
+
+            if (cell.getCellType() == CellType.NUMERIC) {
+                double value = getValue(cell);
 
                 numbers.add((int) value);
             }
         }
     }
+
+    private static double getValue(Cell cell) {
+        double value = cell.getNumericCellValue();
+
+        if (value != Math.floor(value)) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "Дробное число недопустимо: " + value);
+        }
+        if (value < Integer.MIN_VALUE || value > Integer.MAX_VALUE) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "Число за пределами int: " + value);
+        }
+        return value;
+    }
+
 }
