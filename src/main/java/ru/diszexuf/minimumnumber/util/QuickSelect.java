@@ -10,7 +10,6 @@ public final class QuickSelect {
      * @return n-ое наименьшее число
      */
     public static int findNthSmallest(int[] arr, int n) {
-        if (arr == null || arr.length == 0) throw new IllegalArgumentException("Array is empty");
         if (n < 1 || n > arr.length) throw new IllegalArgumentException("Invalid n");
 
         int left = 0, right = arr.length - 1;

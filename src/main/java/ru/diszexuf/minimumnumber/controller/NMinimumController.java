@@ -13,10 +13,10 @@ import ru.diszexuf.minimumnumber.service.NthMinimumService;
 @RequiredArgsConstructor
 public class NMinimumController implements NthMinimumApi {
 
-    private final NthMinimumService nthMinimumServiceImpl;
+    private final NthMinimumService nthMinimumService;
 
     @Override
     public ResponseEntity<Integer> findNthMinimum(@Valid @RequestBody NthMinimumRequest request) {
-        return ResponseEntity.ok(nthMinimumServiceImpl.findNthMinimum(request));
+        return ResponseEntity.ok(nthMinimumService.findNthMinimum(request));
     }
 }
