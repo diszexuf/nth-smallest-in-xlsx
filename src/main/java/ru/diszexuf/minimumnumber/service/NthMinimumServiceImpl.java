@@ -13,7 +13,7 @@ import ru.diszexuf.minimumnumber.util.XlsxReader;
 public class NthMinimumServiceImpl implements NthMinimumService {
 
     public int findNthMinimum(NthMinimumRequest request) {
-        String filePath = request.getFilePath();
+        String filePath = request.getFilePath().replace("\\", "/");
         int n = request.getN();
 
         int[] numbers = XlsxReader.readFirstColumn(filePath);

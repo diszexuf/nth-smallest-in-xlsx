@@ -77,7 +77,7 @@ components:
       properties:
         filePath:
           type: string
-          pattern: ^.*\.xlsx?$
+          pattern: ^.*[\\\\/].*\.(xlsx|xls)$
           description: Абсолютный путь к xlsx-файлу
           example: /home/user/Documents/file.xlsx
         n:
