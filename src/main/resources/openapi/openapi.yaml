@@ -1,0 +1,101 @@
+openapi: 3.0.0
+
+info:
+  title: N Minimum Finder API
+  version: 1.0.0
+  description: Сервис для поиска N-го минимального числа в xlsx-файле, содержащий
+servers:
+  - url: https://127.0.0.1:8080
+    description: Локальный сервер разработки
+
+paths:
+  /api/v1/nth-minimum:
+    post:
+      tags:
+        - nth-minimum
+      summary: Найти N-ое минимальное число
+      description: Считывает 1 столбец в xlsx файле, содержащем целые числа, и возвращает N-он минмиальное число
+      operationId: findNthMinimum
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NthMinimumRequest'
+            example:
+              filePath: /home/user/Documents/file.xlsx
+              n: 5
+      responses:
+        200:
+          description: Найденое N-ое минимальное число
+          content:
+            application/json:
+              schema:
+                type: integer
+                example: 123
+        400:
+          description: Неверный запрос
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Bad request
+                message: N должно быть положительным и не превышать число элементов
+        404:
+          description: Файл не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Not Found
+                message: File doesnt exist
+        '422':
+          description: Ошибка обработки файла
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Unprocessable Entity
+                message: File is not a valid XLSX
+        500:
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Internal Server Error
+                message: Unexpected error occurred
+
+components:
+  schemas:
+    NthMinimumRequest:
+      type: object
+      properties:
+        filePath:
+          type: string
+          pattern: ^.*\.xlsx?$
+          description: Абсолютный путь к xlsx-файлу
+          example: /home/user/Documents/file.xlsx
+        n:
+          type: integer
+          minimum: 1
+          description: Номер минимального числа (Натуральное число)
+          example: 3
+      required: [filePath, n]
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Кратко название ошибки
+          example: Bad Request
+        message:
+          type: string
+          description: Подробное описание
+          example: Error description
+      required: [error, message]
