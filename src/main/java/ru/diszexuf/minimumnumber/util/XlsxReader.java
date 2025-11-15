@@ -8,14 +8,11 @@ import org.springframework.web.server.ResponseStatusException;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-
 import java.nio.file.Path;
 
 public final class XlsxReader {
 
-    private static final long MAX_FILE_SIZE = 10 * 1024 * 1024;
+    private static final long MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
     /**
      * Считывает первый столбец xlsx-файла и возвращает массив целых чисел
@@ -24,105 +21,137 @@ public final class XlsxReader {
      * @return массив чисел из первого столбца
      */
     public static int[] readFirstColumn(String filePath) {
-        Path path = validateAndNormalizePath(filePath);
-        File file = path.toFile();
-
-        validateFileExists(file, filePath);
-        validateFileSize(file);
-        validateFileReadable(file, filePath);
-
-        return readNumericIntegersFromFirstColumn(file);
+        File file = validateFilePath(filePath);
+        return readIntegersFromFile(file);
     }
 
-    private static Path validateAndNormalizePath(String filePath) {
+    /**
+     * Валидация пути к файлу.
+     */
+    private static File validateFilePath(String filePath) {
+        File file = getFile(filePath);
+
+        if (!file.exists()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Файл не найден: " + filePath);
+        }
+
+        if (file.length() > MAX_FILE_SIZE) {
+            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,
+                    "Файл слишком большой (максимум 10MB)");
+        }
+
+        if (!file.canRead()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Невозможно прочитать файл: " + filePath);
+        }
+
+        return file;
+    }
+
+    private static File getFile(String filePath) {
         if (filePath == null || filePath.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Путь к файлу не указан");
         }
 
-        if (filePath.contains("..")) {
+        Path path;
+        try {
+            path = Path.of(filePath).normalize().toAbsolutePath();
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Некорректный путь к файлу");
+        }
+
+        if (path.toString().contains("..")) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Path Traversal запрещён");
         }
 
-        Path path = Path.of(filePath).normalize();
-
-        if (!path.isAbsolute()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Требуется абсолютный путь");
-        }
-
-        return path;
+        return path.toFile();
     }
 
-    private static void validateFileExists(File file, String originalPath) {
-        if (!file.exists()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Файл не найден: " + originalPath);
-        }
-    }
-
-    private static void validateFileSize(File file) {
-        if (file.length() > MAX_FILE_SIZE) {
-            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "Файл слишком большой (>10MB)");
-        }
-    }
-
-    private static void validateFileReadable(File file, String originalPath) {
-        if (!file.canRead()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Невозможно прочитать файл: " + originalPath);
-        }
-    }
-
-    private static int[] readNumericIntegersFromFirstColumn(File file) {
-        List<Integer> numbers = new ArrayList<>();
-
+    /**
+     * Читает целые числа из xlsx-файла
+     */
+    private static int[] readIntegersFromFile(File file) {
         try (FileInputStream fis = new FileInputStream(file);
              Workbook workbook = new XSSFWorkbook(fis)) {
 
-            Sheet sheet = getFirstSheet(workbook);
-            extractIntegersFromColumn(sheet, numbers);
+            Sheet sheet = workbook.getSheetAt(0);
+            if (sheet == null) {
+                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "В файле нет листов");
+            }
+
+            return extractIntegersFromSheet(sheet);
 
         } catch (IOException e) {
-            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Файл повреждён или не является XLSX", e);
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "Файл повреждён или не является XLSX", e);
         }
-
-        return numbers.stream().mapToInt(Integer::intValue).toArray();
     }
 
-    private static Sheet getFirstSheet(Workbook workbook) {
-        if (workbook.getNumberOfSheets() == 0) {
-            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "В файле нет листов");
+    /**
+     * Извлекает целые числа из первого столбца листа
+     */
+    private static int[] extractIntegersFromSheet(Sheet sheet) {
+        int count = 0;
+        for (Row row : sheet) {
+            if (isValidInteger(row.getCell(0))) {
+                count++;
+            }
         }
-        return workbook.getSheetAt(0);
-    }
 
-    private static void extractIntegersFromColumn(Sheet sheet, List<Integer> numbers) {
+        if (count == 0) {
+            return new int[0];
+        }
+
+        int[] result = new int[count];
+        int index = 0;
+
         for (Row row : sheet) {
             Cell cell = row.getCell(0);
-            if (cell == null) continue;
-
-            // в excel даты хранятся как числовые значения
-            if (cell.getCellType() == CellType.NUMERIC && DateUtil.isCellDateFormatted(cell)) {
-                continue;
-            }
-
-            if (cell.getCellType() == CellType.NUMERIC) {
-                double value = getValue(cell);
-
-                numbers.add((int) value);
+            if (isValidInteger(cell)) {
+                result[index++] = extractInteger(cell);
             }
         }
+
+        return result;
     }
 
-    private static double getValue(Cell cell) {
+    /**
+     * Проверяет, является ли ячейка валидным целым числом
+     */
+    private static boolean isValidInteger(Cell cell) {
+        if (cell == null) {
+            return false;
+        }
+
+        // Пропускаем даты (в Excel хранятся как числа)
+        if (cell.getCellType() != CellType.NUMERIC || DateUtil.isCellDateFormatted(cell)) {
+            return false;
+        }
+
+        double value = cell.getNumericCellValue();
+
+        return value == Math.floor(value)
+                && value >= Integer.MIN_VALUE
+                && value <= Integer.MAX_VALUE;
+    }
+
+    /**
+     * Извлекает целое число из ячейки
+     */
+    private static int extractInteger(Cell cell) {
         double value = cell.getNumericCellValue();
 
         if (value != Math.floor(value)) {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
                     "Дробное число недопустимо: " + value);
         }
+
         if (value < Integer.MIN_VALUE || value > Integer.MAX_VALUE) {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
                     "Число за пределами int: " + value);
         }
-        return value;
-    }
 
+        return (int) value;
+    }
 }
